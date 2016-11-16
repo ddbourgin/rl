@@ -1,10 +1,11 @@
+from time import time
+
 import gym
 import numpy as np
-from time import time
 
 from keras.models import Sequential
 from keras.layers.core import Dense
-from keras.optimizers import sgd
+
 
 def init_model(**kwargs):
     """
@@ -18,13 +19,16 @@ def init_model(**kwargs):
     activation = kwargs['activation']
 
     model = Sequential()
-    model.add(Dense(hidden_size, input_shape=(n_obs_dims,), activation=activation))
+    model.add(Dense(hidden_size, input_shape=(
+        n_obs_dims,), activation=activation))
     model.add(Dense(hidden_size, activation=activation))
     model.add(Dense(n_actions, activation='linear'))
     model.compile(optimizer='rmsprop', loss='mse')
     return model
 
+
 class ExperienceReplay(object):
+
     def __init__(self, n_actions, obs_dims, **kwargs):
         self.memory = []
         self.target_net = None
@@ -47,11 +51,11 @@ class ExperienceReplay(object):
 
         X, targets = [], []
         for idx, exp_idx in enumerate(exp_idxs):
+            # memory[idx] = [[s, a, r, s'], done]
             experience = self.memory[exp_idx]
             done = experience[-1]
 
             obs, act, reward, obs_next = experience[0]
-
             X.append(obs)
 
             # use current network to compute target Q values for all
@@ -59,15 +63,17 @@ class ExperienceReplay(object):
             q_vals_obs = q_network.predict(obs[None, :])[0]
             targets.append(q_vals_obs)
 
-            # only update the target for the executed action
+            # only update the target on the executed action; leave
+            # non-executed action Q-vals as-is
             if done:
                 targets[-1][act] = reward
+
             else:
                 # use cached network for computing the target Q value for
-                # the executed action
+                # the (observation, executed action) tuple
                 q_vals_next = self.target_net.predict(obs_next[None, :])[0]
 
-                # reward_t + gamma * max_a' Q(s', a')
+                # Q(s, a) <- reward_t + gamma * max_a' Q(s', a')
                 targets[-1][act] = reward + self.discount * np.max(q_vals_next)
 
         return np.asarray(X), np.asarray(targets)
@@ -94,8 +100,9 @@ def epsilon_greedy_action(obs, q_network, epsilon):
         action = np.argmax(q_vals)
     return action
 
+
 def run_episode(env, q_network, exp_replay, epsilon, batch_size=10,
-        freeze=False, render=False):
+                freeze=False, render=False):
     total_reward = 0.0
     obs = env.reset()
 
@@ -124,7 +131,7 @@ def run_episode(env, q_network, exp_replay, epsilon, batch_size=10,
             #print('\tMB MSE: {}'.format(loss / targets.shape[0]))
 
         if done:
-           break
+            break
 
         obs = obs_next
     return q_network, total_reward
@@ -137,22 +144,24 @@ if __name__ == "__main__":
 
     # initialize run parameters
     gamma = 0.9        # temporal discount parameter
-    n_epochs = 400     # number of episodes to train the q network on
+    n_epochs = 200     # number of episodes to train the q network on
     epsilon = 0.1      # for epsilon-greedy policy during training
-    hidden_dim = 200   # size of the hidden layers in q network
-    mem_limit = 100    # how many recent experiences to retain in memory
-    batch_size = 100    # desired size of experience replay minibatches
-    render = True     # render runs during training
+    hidden_dim = 600   # size of the hidden layers in q network
+    mem_limit = 200    # how many recent experiences to retain in memory
+    batch_size = 100   # desired size of experience replay minibatches
+    unit_activations = 'relu'  # unit activations in q_network
+    update_target_every = 20   # update the target net after ever n epochs
+    render = False     # render runs during training
 
     net_params = \
-            {'activation': 'relu',
-             'hidden_dim': hidden_dim,
-             'n_actions': n_actions,
-             'n_obs_dims': n_obs_dims}
+        {'activation': unit_activations,
+         'hidden_dim': hidden_dim,
+         'n_actions': n_actions,
+         'n_obs_dims': n_obs_dims}
 
     er_params = \
-            {'gamma': gamma,
-             'mem_limit': mem_limit}
+        {'gamma': gamma,
+         'mem_limit': mem_limit}
 
     # initialize network and experience replay objects
     q_network = init_model(**net_params)
@@ -164,21 +173,26 @@ if __name__ == "__main__":
     # train q network and accumulate experiences
     t0 = time()
     for idx in xrange(n_epochs):
-        q_newtork, total_reward = run_episode(env, q_network, exp_replay,
-                epsilon, batch_size=batch_size, render=render)
+        q_network, total_reward = \
+            run_episode(env, q_network, exp_replay, epsilon,
+                        batch_size=batch_size, render=render)
 
         # periodically store a "target network" to reduce oscillations during
         # training
-        if idx % 25 == 0:
+        if idx % update_target_every == 0:
             print('Updating target network')
             exp_replay.update_target_net(q_network)
 
-        print('Total reward on epoch {}/{}:\t{}'.format(idx+1, n_epochs, total_reward))
+        print('Total reward on epoch {}/{}:\t{}'
+              .format(idx + 1, n_epochs, total_reward))
+
     print('Training took {} mins'.format((time() - t0) / 60.))
-
     print('Executing greedy policy using frozen Q-network')
-    for idx in xrange(10):
-        q_newtork, total_reward = run_episode(env, q_network, exp_replay,
-                -1., batch_size=batch_size, freeze=True, render=True)
-        print('Total reward on greedy epoch {}/{}:\t{}'.format(idx+1, 10, total_reward))
 
+    for idx in xrange(10):
+        q_network, total_reward = \
+            run_episode(env, q_network, exp_replay, -1.,
+                        batch_size=batch_size, freeze=True, render=True)
+
+        print('Total reward on greedy epoch {}/{}:\t{}'
+              .format(idx + 1, 10, total_reward))
