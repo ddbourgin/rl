@@ -1,3 +1,4 @@
+import os
 import gym
 import numpy as np
 import cPickle as pickle
@@ -15,7 +16,7 @@ def epsilon_greedy_action(env, q_func, obs_hash, epsilon=0.5):
         action = np.random.randint(env.action_space.n)
     return action
 
-def q_learner(env, max_time, alpha, gamma, q_func=None, epsilon=0.5):
+def q_learner(env, max_time, alpha, gamma, q_func=None, epsilon=0.5, render=False):
     """
     Naive implementation of standard Q-learning using the update
 
@@ -23,17 +24,20 @@ def q_learner(env, max_time, alpha, gamma, q_func=None, epsilon=0.5):
     """
     obs = env.reset()
     obs_hash = hash(obs.tostring())
+    total_reward = 0.
 
     if not q_func:
         q_func = {}
 
     # train on an episode
     for _ in range(max_time):
-        env.render()
-        action = epsilon_greedy_action(env, q_func, obs_hash, epsilon=epsilon)
+        if render:
+            env.render()
 
+        action = epsilon_greedy_action(env, q_func, obs_hash, epsilon=epsilon)
         state_action = (obs_hash, action)
         obs_new, reward, done, info = env.step(action)
+        total_reward += reward
 
         obs_new_hash = hash(obs_new.tostring())
 
@@ -47,23 +51,26 @@ def q_learner(env, max_time, alpha, gamma, q_func=None, epsilon=0.5):
         if state_action not in q_func:
             q_func[state_action] = 0.
 
-        # q-learning update
-        q_func[state_action] = q_func[state_action] + alpha * (reward + gamma *
-                (q_func[state_action_new] - q_func[state_action]))
+        old = q_func[state_action]
 
+        # TD(0) update
+        q_func[state_action] = q_func[state_action] + alpha * (reward + gamma *
+                q_func[state_action_new] - q_func[state_action])
         state_action = state_action_new
 
         if done:
            break
 
+    print('Total reward: {}'.format(total_reward))
     return q_func
 
-def greedy_policy(env, q_func):
+def greedy_policy(env, q_func, render=True):
     obs = env.reset()
     obs_hash = hash(obs.tostring())
 
     for _ in range(1000):
-        env.render()
+        if render:
+            env.render()
         action = epsilon_greedy_action(env, q_func, obs_hash, epsilon=1.)
 
         state_action = (obs_hash, action)
@@ -82,17 +89,21 @@ if __name__ == "__main__":
     gamma = 0.9      # discount rate
     epsilon = 0.5    # probability of not executing greedy policy
     n_episodes = 1000
+    render = False   # render progress during traning
 
-    with open('q_func.pkl', 'rb') as handle:
-        q_func = pickle.load(handle)
+    if os.path.exists('q_func.pkl'):
+        with open('q_func.pkl') as handle:
+            q_func = pickle.load(handle)
+    else:
+        q_func = None
 
     for idx in xrange(n_episodes):
         print('Running episode {}'.format(idx+1))
-        q_func = q_learner(env, max_time, alpha, gamma, q_func, epsilon=epsilon)
+        q_func = q_learner(env, max_time, alpha, gamma, q_func,
+                epsilon=epsilon, render=render)
 
     print('Done training!')
 
     for _ in xrange(20):
         print('Starting new session')
-        greedy_policy(env, q_func)
-
+        greedy_policy(env, q_func, render=True)

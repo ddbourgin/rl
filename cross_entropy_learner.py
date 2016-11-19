@@ -76,12 +76,11 @@ def cross_entropy_solver(theta_mean, theta_var, **kwargs):
     theta_var = np.var(theta_samples[elite_idxs], axis=0)
     return theta_mean, theta_var, avg_reward, min_reward
 
-
 if __name__ == "__main__":
-    env = gym.make('CartPole-v0')
+    env = gym.make('LunarLander-v2')
     n_theta_samples = 500
     n_elites = int(n_theta_samples * 0.2)
-    n_episodes = 200
+    n_episodes = 50
     horizon = 200
     render = False
 
@@ -107,5 +106,14 @@ if __name__ == "__main__":
     for ep_id in xrange(n_episodes):
         theta_mean, theta_var, avg_reward, min_reward = \
                 cross_entropy_solver(theta_mean, theta_var, **ce_params)
+        print('Episode {}... \tAvg reward = {}, Worst = {}'\
+                .format(ep_id + 1, avg_reward, min_reward))
+
+    ce_params['render'] = True
+    for ep_id in xrange(20):
+        print('Starting greedy session with frozen q function')
+        _, _, avg_reward, min_reward = \
+                cross_entropy_solver(theta_mean, theta_var, **ce_params)
+
         print('Episode {}... \tAvg reward = {}, Worst = {}'\
                 .format(ep_id + 1, avg_reward, min_reward))
