@@ -2,9 +2,12 @@ from time import time
 
 import gym
 import numpy as np
+import matplotlib.pyplot as plt
+from scipy.signal import savgol_filter
 
 from keras.models import Sequential
 from keras.layers.core import Dense
+from keras.optimizers import RMSprop
 
 
 def init_model(**kwargs):
@@ -17,13 +20,15 @@ def init_model(**kwargs):
     n_obs_dims = kwargs['n_obs_dims']
     n_actions = kwargs['n_actions']
     activation = kwargs['activation']
+    lr = kwargs['learning_rate']
 
     model = Sequential()
     model.add(Dense(hidden_size, input_shape=(
         n_obs_dims,), activation=activation))
     model.add(Dense(hidden_size, activation=activation))
     model.add(Dense(n_actions, activation='linear'))
-    model.compile(optimizer='rmsprop', loss='mse')
+    rmsprop = RMSprop(lr=lr)
+    model.compile(optimizer=rmsprop, loss='mse')
     return model
 
 
@@ -102,12 +107,13 @@ def epsilon_greedy_action(obs, q_network, epsilon):
 
 
 def run_episode(env, q_network, exp_replay, epsilon, batch_size=10,
-                freeze=False, render=False):
+                freeze=False, render=False, episode_len=200):
     total_reward = 0.0
     obs = env.reset()
 
     # run one episode of the RL problem
-    for _ in xrange(4000):
+    for _ in xrange(episode_len):
+        mse = None
         if render:
             env.render()
 
@@ -127,34 +133,69 @@ def run_episode(env, q_network, exp_replay, epsilon, batch_size=10,
             q_network.train_on_batch(X, targets)
 
             # compute mse loss
-            #loss = np.sum((targets - q_network.predict(X)) ** 2)
-            #print('\tMB MSE: {}'.format(loss / targets.shape[0]))
+            mse = np.mean((targets - q_network.predict(X)) ** 2)
 
         if done:
             break
 
         obs = obs_next
-    return q_network, total_reward
+    return q_network, total_reward, mse
+
+
+def plot_run(epoch_reward, epoch_mse, **kwargs):
+    n_epochs = kwargs['n_epochs']
+    update_target_every = kwargs['update_every']
+    window_size = kwargs['smoothing_window']
+    save_path = kwargs['save_path']
+
+    t_update_epoch = \
+        [i for i in np.arange(1, n_epochs + 1) if i % update_target_every == 0]
+
+    smooth_reward = savgol_filter(epoch_reward, window_size, 2)
+    smooth_mse = savgol_filter(epoch_mse, window_size, 2)
+
+    fig, ax = plt.subplots(2, 1)
+
+    ax[0].plot(np.arange(1, n_epochs + 1), smooth_reward)
+    ax[0].set_xlabel('Epoch')
+    ax[0].set_ylabel('Reward')
+    for i in t_update_epoch:
+        ax[0].axvline(i, color='r')
+
+    ax[1].plot(np.arange(1, n_epochs + 1), smooth_mse)
+    ax[1].set_xlabel('Epoch')
+    ax[1].set_ylabel('Training MSE')
+    for i in t_update_epoch:
+        ax[1].axvline(i, color='r')
+
+    plt.show()
+    plt.savefig(save_path)
 
 if __name__ == "__main__":
     # initialize RL environment
     env = gym.make('CartPole-v0')
-    n_actions = env.action_space.n
+    n_actions = env.action_space.n  # TODO: adapt this for continuous action spaces
     n_obs_dims = env.observation_space.shape[0]
 
     # initialize run parameters
     gamma = 0.9        # temporal discount parameter
-    n_epochs = 200     # number of episodes to train the q network on
-    epsilon = 0.1      # for epsilon-greedy policy during training
-    hidden_dim = 600   # size of the hidden layers in q network
-    mem_limit = 200    # how many recent experiences to retain in memory
-    batch_size = 100   # desired size of experience replay minibatches
+    n_epochs = 500     # number of episodes to train the q network on
+    epsilon = 0.10     # for epsilon-greedy policy during training
+    mem_limit = 400    # how many recent experiences to retain in memory
+    hidden_dim = 800   # size of the hidden layers in q network
+    batch_size = 200   # desired size of experience replay minibatches
+    max_episode_len = 200      # max number of timesteps per episode/epoch
+    learning_rate = 0.001      # learning rate for q_network
     unit_activations = 'relu'  # unit activations in q_network
-    update_target_every = 20   # update the target net after ever n epochs
-    render = False     # render runs during training
+    update_target_every = 20   # update the target net after every n epochs
+    render = False  # render runs during training
+
+    save_fp = './q_learner_training_lr{}_meml{}_batch{}_hidden{}.png'\
+        .format(learning_rate, mem_limit, batch_size, hidden_dim)
 
     net_params = \
         {'activation': unit_activations,
+         'learning_rate': learning_rate,
          'hidden_dim': hidden_dim,
          'n_actions': n_actions,
          'n_obs_dims': n_obs_dims}
@@ -162,6 +203,12 @@ if __name__ == "__main__":
     er_params = \
         {'gamma': gamma,
          'mem_limit': mem_limit}
+
+    plotting_params = \
+        {'n_epochs': n_epochs,
+         'save_path': save_fp,
+         'smoothing_window': 7,
+         'update_every': update_target_every}
 
     # initialize network and experience replay objects
     q_network = init_model(**net_params)
@@ -172,10 +219,12 @@ if __name__ == "__main__":
 
     # train q network and accumulate experiences
     t0 = time()
+    epoch_reward, epoch_mse = [], []
     for idx in xrange(n_epochs):
-        q_network, total_reward = \
+        q_network, total_reward, mse = \
             run_episode(env, q_network, exp_replay, epsilon,
-                        batch_size=batch_size, render=render)
+                        batch_size=batch_size, render=render,
+                        episode_len=max_episode_len)
 
         # periodically store a "target network" to reduce oscillations during
         # training
@@ -185,12 +234,19 @@ if __name__ == "__main__":
 
         print('Total reward on epoch {}/{}:\t{}'
               .format(idx + 1, n_epochs, total_reward))
+        print('Model MSE on epoch {}/{}: \t{}\n'
+              .format(idx + 1, n_epochs, mse))
+
+        epoch_reward.append(total_reward)
+        epoch_mse.append(mse)
 
     print('Training took {} mins'.format((time() - t0) / 60.))
     print('Executing greedy policy using frozen Q-network')
 
+    plot_run(epoch_reward, epoch_mse, **plotting_params)
+
     for idx in xrange(10):
-        q_network, total_reward = \
+        q_network, total_reward, mse = \
             run_episode(env, q_network, exp_replay, -1.,
                         batch_size=batch_size, freeze=True, render=True)
 
