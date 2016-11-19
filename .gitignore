@@ -130,3 +130,9 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# training images
+*.png
+
+# pickled data
+*.pkl
