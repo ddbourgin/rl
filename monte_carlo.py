@@ -19,7 +19,7 @@ class MonteCarloLearner(object):
         action_space = kwargs['n_actions']
         if isinstance(action_space, list):
             one_dim_action = list(
-                itertools.product([range(i) for i in action_space]))
+                itertools.product(*[range(i) for i in action_space]))
         else:
             one_dim_action = range(action_space)
 
