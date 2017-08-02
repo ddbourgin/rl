@@ -190,7 +190,7 @@ if __name__ == "__main__":
     update_target_every = 20   # update the target net after every n epochs
     render = False  # render runs during training
 
-    save_fp = './q_learner_training_lr{}_meml{}_batch{}_hidden{}.png'\
+    save_fp = './plots/deep_q_training_lr{}_meml{}_batch{}_hidden{}.png'\
         .format(learning_rate, mem_limit, batch_size, hidden_dim)
 
     net_params = \
