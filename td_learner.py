@@ -1,7 +1,10 @@
 from time import time
 import itertools
+
 import gym
 import numpy as np
+
+from utils import check_discrete
 
 class TDLearner(object):
     """
@@ -92,7 +95,7 @@ class TDLearner(object):
             reward_history.append(reward)
 
             if self.off_policy:
-                # Q-learning on-policy update
+                # Q-learning off-policy update
                 self.off_policy_update_Q(obs, a, reward, obs_)
 
                 # update observations and actions
@@ -102,7 +105,7 @@ class TDLearner(object):
                 action_ = self.epsilon_soft_policy(obs_)
                 a_ = self.action2num[action]
 
-                # SARSA on-policy update
+                # expected SARSA on-policy update
                 self.on_policy_update_Q(obs, a, reward, obs_, a_)
 
                 # update observations and actions
@@ -116,11 +119,19 @@ class TDLearner(object):
 if __name__ == "__main__":
     # initialize RL environment
     env = gym.make('Copy-v0')
+    is_multi_obs, is_multi_act = check_discrete(env, 'Temporal Difference')
 
     # action space is multidimensional
-    n_actions = [env.action_space.spaces[i].n for i in range(3)]
+    if is_multi_act:
+        n_actions = [space.n for space in env.action_space.spaces]
+    else:
+        n_actions = env.action_space.n
 
-    n_obs_dims = env.observation_space.n
+    # observation space is multidimensional
+    if is_multi_obs:
+        n_obs = [space.n for space in env.observation_space.spaces]
+    else:
+        n_obs = env.observation_space.n
 
     # initialize run parameters
     n_epochs = 100000       # number of episodes to train the q network on

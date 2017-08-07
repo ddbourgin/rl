@@ -1,13 +1,15 @@
 from time import time
 import itertools
+
 import gym
 import numpy as np
+
+from utils import check_discrete
 
 
 class MonteCarloLearner(object):
     """
-    Implements on-policy, first visit Monte Carlo learning for an epsilon-soft
-    policy.
+    A tabular Monte Carlo learning agent.
     """
 
     def __init__(self, **kwargs):
@@ -15,7 +17,7 @@ class MonteCarloLearner(object):
         self.episode_len = kwargs['max_episode_len']
         self.off_policy = kwargs['off_policy']
         self.gamma = kwargs['discount_factor']
-        self.n_states = kwargs['n_obs_dims']
+        self.n_states = np.prod(kwargs['n_obs'])
         self.epsilon = kwargs['epsilon']
 
         # create action -> scalar dictionaries
@@ -145,14 +147,23 @@ class MonteCarloLearner(object):
 
         return np.sum(reward_history)
 
+
 if __name__ == "__main__":
     # initialize RL environment
     env = gym.make('Copy-v0')
+    is_multi_obs, is_multi_act = check_discrete(env, 'Monte Carlo')
 
     # action space is multidimensional
-    n_actions = [env.action_space.spaces[i].n for i in range(3)]
+    if is_multi_act:
+        n_actions = [space.n for space in env.action_space.spaces]
+    else:
+        n_actions = env.action_space.n
 
-    n_obs_dims = env.observation_space.n
+    # observation space is multidimensional
+    if is_multi_obs:
+        n_obs = [space.n for space in env.observation_space.spaces]
+    else:
+        n_obs = env.observation_space.n
 
     # initialize run parameters
     n_epochs = 1000000      # number of episodes to train the q network on
@@ -165,7 +176,7 @@ if __name__ == "__main__":
     mc_params = \
         {'epsilon': epsilon,
          'n_actions': n_actions,
-         'n_obs_dims': n_obs_dims,
+         'n_obs': n_obs,
          'off_policy': off_policy,
          'max_episode_len': max_episode_len,
          'discount_factor': discount_factor}

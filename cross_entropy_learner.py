@@ -1,119 +1,162 @@
+from time import time
+import itertools
+
 import gym
 import numpy as np
-import cPickle as pickle
 
-def softmax(obs, W, b):
-    out = obs.dot(W) + b
-    probs = np.exp(out) / np.sum(np.exp(out))
-    return probs
+from utils import softmax, check_discrete
 
-def gen_action(obs, W, b):
+
+class CrossEntropyLearner(object):
     """
-    Assumes that the pmf over actions in state x_t is given by
-
-        softmax( x_t * W + b )
-
-    where W is a learned weight matrix, x_t is the observation at timestep t, and
-    b is a learned bias vector.
+    A cross-entropy method learning agent
     """
-    probs = softmax(obs, W, b)
-    action = np.random.multinomial(1, probs).argmax()
-    return action
 
-def run_episode(env, W, b, horizon=400, render=False):
-    total_reward = 0.0
-    obs = env.reset()
+    def __init__(self, **kwargs):
+        self.n_actions = np.prod(kwargs['n_actions'])
+        self.episode_len = kwargs['max_episode_len']
+        self.obs_dim = kwargs['n_obs_dim']
+        self.bias_len = kwargs['bias_len']
+        self.top_n = kwargs['top_n']
+        self.weights_len = kwargs['weights_len']
+        self.n_theta_samples = kwargs['n_theta_samples']
 
-    for _ in xrange(horizon):
-        if render:
-            env.render()
+        self.theta_dim = self.weights_len + self.bias_len
 
-        action = gen_action(obs, W, b)
-        obs, reward, done, info = env.step(action)
-        total_reward += reward
+        # init mean and variance for mv gaussian with dimensions theta_dim
+        self.theta_mean = np.random.rand(self.theta_dim)
+        self.theta_var = np.ones(self.theta_dim)
 
-        if done:
-           break
-    return total_reward
+        # create action -> scalar dictionaries
+        action_space = kwargs['n_actions']
+        if isinstance(action_space, list):
+            one_dim_action = list(
+                itertools.product(*[range(i) for i in action_space]))
+        else:
+            one_dim_action = range(action_space)
 
-def cross_entropy_solver(theta_mean, theta_var, **kwargs):
-    """
-    Implementation of cross-entropy method for black-box optimization of the
-    total accumuluated reward during an episode
-    """
-    n_theta_samples = kwargs['n_theta_samples']
-    weights_len = kwargs['weights_len']
-    n_elites = kwargs['n_elites']
-    bias_len = kwargs['bias_len']
-    horizon = kwargs['horizon']
-    render = kwargs['render']
-    env = kwargs['env']
+        self.action2num = {act: i for i, act in enumerate(one_dim_action)}
+        self.num2action = {i: act for act, i in self.action2num.items()}
 
-    n_actions = env.action_space.n
-    n_obs_dims = env.observation_space.shape[0]
+    def softmax_policy(self, obs, W, b):
+        """
+        Assumes that the pmf over actions in state x_t is given by
 
-    # sample n_theta_samples (x_vals) from a mv gaussian with mean theta_mean and
-    # diagonal covariance
-    theta_samples = np.random.multivariate_normal(theta_mean,
-            np.diag(theta_var), n_theta_samples)
+            softmax( x_t * W + b )
 
-    # evaluate each of the theta_samples (x_vals) on an episode of the RL problem
-    y_vals = []
-    for theta in theta_samples:
-        W = theta[:weights_len].reshape(n_obs_dims, n_actions)
-        b = theta[weights_len:]
-        total_reward = run_episode(env, W, b, horizon=horizon, render=render)
-        y_vals.append(total_reward)
+        where W is a learned weight matrix, x_t is the observation at timestep
+        t, and b is a learned bias vector.
+        """
+        if self.obs_dim == 1:
+            obs = np.array([obs])
 
-    avg_reward = np.mean(y_vals)
-    min_reward = np.min(y_vals)
+        probs = softmax(obs, W, b)
+        action = np.random.multinomial(1, probs).argmax()
+        return self.num2action[action]
 
-    # sort the y_vals (total_rewards) from greatest to least
-    sorted_y_val_idxs = np.argsort(y_vals)[::-1]
-    elite_idxs = sorted_y_val_idxs[:n_elites]
+    def evaluate_sample(self, env, W, b, render=False):
+        obs = env.reset()
 
-    theta_mean = np.mean(theta_samples[elite_idxs], axis=0)
-    theta_var = np.var(theta_samples[elite_idxs], axis=0)
-    return theta_mean, theta_var, avg_reward, min_reward
+        total_reward = 0.0
+        for _ in xrange(self.episode_len):
+            if render:
+                env.render()
+
+            action = self.softmax_policy(obs, W, b)
+            obs, reward, done, info = env.step(action)
+            total_reward += reward
+
+            if done:
+                break
+
+        return total_reward
+
+    def run_episode(self, env, render=False, freeze_theta=False):
+        # sample n_theta_samples (x_vals) from a mv gaussian with mean
+        # theta_mean and diagonal covariance
+        theta_samples = np.random.multivariate_normal(
+            self.theta_mean, np.diag(self.theta_var), self.n_theta_samples)
+
+        # evaluate each of the theta_samples (x_vals) on an episode of the RL
+        # problem
+        y_vals = []
+        for theta in theta_samples:
+            W = theta[:self.weights_len].reshape(self.obs_dim, self.n_actions)
+            b = theta[self.weights_len:]
+
+            total_reward = self.evaluate_sample(env, W, b, render=render)
+            y_vals.append(total_reward)
+
+        # sort the y_vals (total_rewards) from greatest to least
+        sorted_y_val_idxs = np.argsort(y_vals)[::-1]
+        top_idxs = sorted_y_val_idxs[:top_n]
+
+        # update theta_mean and theta_var with the best theta value
+        if not freeze_theta:
+            self.theta_mean = np.mean(theta_samples[top_idxs], axis=0)
+            self.theta_var = np.var(theta_samples[top_idxs], axis=0)
+
+        # get the average reward for the top performing theta samples
+        avg_reward = np.mean(np.array(y_vals)[top_idxs])
+        return avg_reward
+
 
 if __name__ == "__main__":
-    env = gym.make('LunarLander-v2')
-    n_theta_samples = 500
-    n_elites = int(n_theta_samples * 0.2)
-    n_episodes = 50
-    horizon = 200
-    render = False
+    # initialize rl environment
+    env = gym.make('CartPole-v0')
+    is_multi_obs, is_multi_act = \
+        check_discrete(env, 'Cross Entropy', action=True, obs=False)
 
-    num_actions = env.action_space.n
-    num_obs_dims = env.observation_space.shape[0]
+    if is_multi_act:
+        n_actions = [space.n for space in env.action_space.spaces]
+    else:
+        n_actions = env.action_space.n
 
-    bias_len = num_actions
-    weights_len = num_actions * num_obs_dims
-    theta_dim = weights_len + bias_len
+    try:
+        n_obs_dim = env.observation_space.sample().shape[0]
+    except AttributeError:
+        n_obs_dim = 1
 
-    # init mean and variance for mv gaussian with dimensions theta_dim
-    theta_mean = np.random.rand(theta_dim)
-    theta_var = np.ones(theta_dim)
+    bias_len = np.prod(n_actions)
+    weights_len = np.prod(n_actions) * np.prod(n_obs_dim)
 
-    ce_params = {'n_theta_samples': n_theta_samples,
-                 'bias_len': bias_len,
-                 'n_elites': n_elites,
-                 'weights_len': weights_len,
-                 'render': render,
-                 'env': env,
-                 'horizon': horizon}
+    # initialize run parameters
+    max_episode_len = 200   # max number of timesteps per episode
+    n_episodes = 1000       # number of episodes to train the XE learner on
+    render = False          # render runs during training?
+    n_theta_samples = 500               # number of samples to generate per run
+    top_n = int(n_theta_samples * 0.2)  # average over the `top_n` best
+    # performing theta samples
 
-    for ep_id in xrange(n_episodes):
-        theta_mean, theta_var, avg_reward, min_reward = \
-                cross_entropy_solver(theta_mean, theta_var, **ce_params)
-        print('Episode {}... \tAvg reward = {}, Worst = {}'\
-                .format(ep_id + 1, avg_reward, min_reward))
+    xe_params = \
+        {'n_actions':  n_actions,
+         'n_obs_dim': n_obs_dim,
+         'max_episode_len':  max_episode_len,
+         'n_theta_samples': n_theta_samples,
+         'bias_len': bias_len,
+         'top_n': top_n,
+         'weights_len': weights_len}
 
-    ce_params['render'] = True
-    for ep_id in xrange(20):
-        print('Starting greedy session with frozen q function')
-        _, _, avg_reward, min_reward = \
-                cross_entropy_solver(theta_mean, theta_var, **ce_params)
+    # initialize network and experience replay objects
+    xe_learner = CrossEntropyLearner(**xe_params)
 
-        print('Episode {}... \tAvg reward = {}, Worst = {}'\
-                .format(ep_id + 1, avg_reward, min_reward))
+    # train cross entropy learner
+    t0 = time()
+    epoch_reward = []
+    for idx in xrange(n_episodes):
+        avg_reward = xe_learner.run_episode(env)
+
+        print('Average reward on epoch {}/{}:\t{}'
+              .format(idx + 1, n_episodes, avg_reward))
+
+        epoch_reward.append(avg_reward)
+
+    print('\nTraining took {} mins'.format((time() - t0) / 60.))
+    print('Executing greedy policy\n')
+
+    for idx in xrange(10):
+        avg_reward = xe_learner.run_episode(env, render=True,
+                                            freeze_theta=True)
+
+        print('Average reward on greedy epoch {}/{}:\t{}\n'
+              .format(idx + 1, 10, avg_reward))
