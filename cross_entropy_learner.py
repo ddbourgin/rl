@@ -6,37 +6,50 @@ import numpy as np
 
 from utils import softmax, check_discrete
 
-
 class CrossEntropyLearner(object):
     """
     A cross-entropy method learning agent
     """
 
-    def __init__(self, **kwargs):
-        self.n_actions = np.prod(kwargs['n_actions'])
-        self.episode_len = kwargs['max_episode_len']
-        self.obs_dim = kwargs['n_obs_dim']
-        self.bias_len = kwargs['bias_len']
-        self.top_n = kwargs['top_n']
-        self.weights_len = kwargs['weights_len']
-        self.n_theta_samples = kwargs['n_theta_samples']
+    def __init__(self, env, **kwargs):
+        self.__validate_env__(env)
 
-        self.theta_dim = self.weights_len + self.bias_len
+        self.episode_len = kwargs['max_episode_len']
+        self.top_n = kwargs['top_n']
+        self.n_theta_samples = kwargs['n_theta_samples']
 
         # init mean and variance for mv gaussian with dimensions theta_dim
         self.theta_mean = np.random.rand(self.theta_dim)
         self.theta_var = np.ones(self.theta_dim)
 
-        # create action -> scalar dictionaries
-        action_space = kwargs['n_actions']
-        if isinstance(action_space, list):
-            one_dim_action = list(
-                itertools.product(*[range(i) for i in action_space]))
-        else:
-            one_dim_action = range(action_space)
+    def __validate_env__(self, env):
+        _, is_multi_act = \
+            check_discrete(env, 'Cross Entropy', action=True, obs=False)
 
+        # action space is multidimensional
+        if is_multi_act:
+            n_actions = [space.n for space in env.action_space.spaces]
+            one_dim_action = list(
+                itertools.product(*[range(i) for i in n_actions]))
+        else:
+            n_actions = env.action_space.n
+            one_dim_action = range(n_actions)
+
+        try:
+            n_obs_dim = env.observation_space.shape[0]
+        except AttributeError:
+            n_obs_dim = 1
+
+        # create action -> scalar dictionaries
         self.action2num = {act: i for i, act in enumerate(one_dim_action)}
         self.num2action = {i: act for act, i in self.action2num.items()}
+
+        self.n_actions = np.prod(n_actions)
+        self.obs_dim = n_obs_dim
+
+        self.bias_len = np.prod(n_actions)
+        self.weights_len = np.prod(n_actions) * np.prod(n_obs_dim)
+        self.theta_dim = self.weights_len + self.bias_len
 
     def softmax_policy(self, obs, W, b):
         """
@@ -103,42 +116,23 @@ class CrossEntropyLearner(object):
 
 if __name__ == "__main__":
     # initialize rl environment
-    env = gym.make('CartPole-v0')
-    is_multi_obs, is_multi_act = \
-        check_discrete(env, 'Cross Entropy', action=True, obs=False)
-
-    if is_multi_act:
-        n_actions = [space.n for space in env.action_space.spaces]
-    else:
-        n_actions = env.action_space.n
-
-    try:
-        n_obs_dim = env.observation_space.sample().shape[0]
-    except AttributeError:
-        n_obs_dim = 1
-
-    bias_len = np.prod(n_actions)
-    weights_len = np.prod(n_actions) * np.prod(n_obs_dim)
+    env = gym.make('LunarLander-v2')
 
     # initialize run parameters
-    max_episode_len = 200   # max number of timesteps per episode
     n_episodes = 1000       # number of episodes to train the XE learner on
-    render = False          # render runs during training?
+    max_episode_len = 200   # max number of timesteps per episode
     n_theta_samples = 500               # number of samples to generate per run
     top_n = int(n_theta_samples * 0.2)  # average over the `top_n` best
     # performing theta samples
+    render = False          # render runs during training?
 
     xe_params = \
-        {'n_actions':  n_actions,
-         'n_obs_dim': n_obs_dim,
-         'max_episode_len':  max_episode_len,
+        {'max_episode_len':  max_episode_len,
          'n_theta_samples': n_theta_samples,
-         'bias_len': bias_len,
-         'top_n': top_n,
-         'weights_len': weights_len}
+         'top_n': top_n}
 
     # initialize network and experience replay objects
-    xe_learner = CrossEntropyLearner(**xe_params)
+    xe_learner = CrossEntropyLearner(env, **xe_params)
 
     # train cross entropy learner
     t0 = time()

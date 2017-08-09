@@ -12,24 +12,13 @@ class MonteCarloLearner(object):
     A tabular Monte Carlo learning agent.
     """
 
-    def __init__(self, **kwargs):
-        self.n_actions = np.prod(kwargs['n_actions'])
+    def __init__(self, env, **kwargs):
+        self.__validate_env__(env)
+
         self.episode_len = kwargs['max_episode_len']
         self.off_policy = kwargs['off_policy']
         self.gamma = kwargs['discount_factor']
-        self.n_states = np.prod(kwargs['n_obs'])
         self.epsilon = kwargs['epsilon']
-
-        # create action -> scalar dictionaries
-        action_space = kwargs['n_actions']
-        if isinstance(action_space, list):
-            one_dim_action = list(
-                itertools.product(*[range(i) for i in action_space]))
-        else:
-            one_dim_action = range(action_space)
-
-        self.action2num = {act: i for i, act in enumerate(one_dim_action)}
-        self.num2action = {i: act for act, i in self.action2num.items()}
 
         # initialize Q function
         self.Q = np.random.rand(self.n_states, self.n_actions)
@@ -47,10 +36,39 @@ class MonteCarloLearner(object):
             self.behavior_policy = self.epsilon_soft_policy
 
             # target policy is deterministic, greedy policy
-            self.target_policy = \
-                lambda obs, action=None: \
-                self.num2action[self.Q[obs, :].argmax()] if action is None \
-                else np.abs(self.Q[obs, action]) / np.sum(np.abs(self.Q[obs, :]))
+            self.target_policy = self.greedy_policy
+
+    def __validate_env__(self, env):
+        is_multi_obs, is_multi_act = check_discrete(env, 'Monte Carlo')
+
+        # action space is multidimensional
+        if is_multi_act:
+            n_actions = [space.n for space in env.action_space.spaces]
+            one_dim_action = list(
+                itertools.product(*[range(i) for i in n_actions]))
+        else:
+            n_actions = env.action_space.n
+            one_dim_action = range(n_actions)
+
+        # observation space is multidimensional
+        if is_multi_obs:
+            n_obs = [space.n for space in env.observation_space.spaces]
+            one_dim_obs = list(
+                itertools.product(*[range(i) for i in n_obs]))
+        else:
+            n_obs = env.observation_space.n
+            one_dim_obs = range(n_obs)
+
+        # create action -> scalar dictionaries
+        self.action2num = {act: i for i, act in enumerate(one_dim_action)}
+        self.num2action = {i: act for act, i in self.action2num.items()}
+
+        # create obs -> scalar dictionaries
+        self.obs2num = {act: i for i, act in enumerate(one_dim_obs)}
+        self.num2obs = {i: act for act, i in self.obs2num.items()}
+
+        self.n_actions = np.prod(n_actions)
+        self.n_states = np.prod(n_obs)
 
     def on_policy_update_Q(self, episode_history, reward_history):
         """
@@ -94,12 +112,18 @@ class MonteCarloLearner(object):
             if W == 0.:
                 break
 
-    def epsilon_soft_policy(self, observation, action=None):
+    def greedy_policy(self, obs, action=None):
+        if action is None:
+            return self.num2action[self.Q[obs, :].argmax()]
+        else:
+            return np.abs(self.Q[obs, action]) / np.sum(np.abs(self.Q[obs, :]))
+
+    def epsilon_soft_policy(self, obs, action=None):
         """
         pi(a|s) = 1 - epsilon + (epsilon / |A(s)|) IFF a == a*
         pi(a|s) = epsilon / |A(s)|                 IFF a != a*
         """
-        a_star = self.Q[observation, :].argmax()
+        a_star = self.Q[obs, :].argmax()
         p_a_star = 1. - self.epsilon + (self.epsilon / self.n_actions)
         p_a = self.epsilon / self.n_actions
 
@@ -115,6 +139,7 @@ class MonteCarloLearner(object):
 
     def run_episode(self, env, render=False):
         obs = env.reset()
+        obs_number = self.obs2num[obs]
 
         # run one episode of the RL problem
         episode_history, reward_history = [], []
@@ -123,21 +148,24 @@ class MonteCarloLearner(object):
                 env.render()
 
             # generate an action using epsilon-soft policy
-            action = self.epsilon_soft_policy(obs)
+            action = self.epsilon_soft_policy(obs_number)
             action_number = self.action2num[action]
 
             # store (state, action) tuple
-            episode_history.append((obs, action_number))
+            episode_history.append((obs_number, action_number))
 
             # take action
             obs_next, reward, done, info = env.step(action)
+            obs_next_number = self.obs2num[obs_next_number]
 
             # record rewards
             reward_history.append(reward)
 
             if done:
                 break
+
             obs = obs_next
+            obs_number = obs_next_number
 
         if self.off_policy:
             self.off_policy_update_Q(episode_history, reward_history)
@@ -151,19 +179,6 @@ class MonteCarloLearner(object):
 if __name__ == "__main__":
     # initialize RL environment
     env = gym.make('Copy-v0')
-    is_multi_obs, is_multi_act = check_discrete(env, 'Monte Carlo')
-
-    # action space is multidimensional
-    if is_multi_act:
-        n_actions = [space.n for space in env.action_space.spaces]
-    else:
-        n_actions = env.action_space.n
-
-    # observation space is multidimensional
-    if is_multi_obs:
-        n_obs = [space.n for space in env.observation_space.spaces]
-    else:
-        n_obs = env.observation_space.n
 
     # initialize run parameters
     n_epochs = 1000000      # number of episodes to train the q network on
@@ -175,14 +190,12 @@ if __name__ == "__main__":
 
     mc_params = \
         {'epsilon': epsilon,
-         'n_actions': n_actions,
-         'n_obs': n_obs,
          'off_policy': off_policy,
          'max_episode_len': max_episode_len,
          'discount_factor': discount_factor}
 
     # initialize network and experience replay objects
-    mc_learner = MonteCarloLearner(**mc_params)
+    mc_learner = MonteCarloLearner(env, **mc_params)
 
     # train monte carlo learner
     t0 = time()
