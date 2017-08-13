@@ -14,16 +14,16 @@ class CrossEntropyLearner(object):
     def __init__(self, env, **kwargs):
         self.__validate_env__(env)
 
-        self.episode_len = kwargs['max_episode_len']
-        self.top_n = kwargs['top_n']
-        self.n_theta_samples = kwargs['n_theta_samples']
+        self.n_theta_samples = n_theta_samples
+        self.episode_len = max_episode_len
+        self.top_n = top_n
 
         # init mean and variance for mv gaussian with dimensions theta_dim
         self.theta_mean = np.random.rand(self.theta_dim)
         self.theta_var = np.ones(self.theta_dim)
 
     def __validate_env__(self, env):
-        _, is_multi_act = \
+        _, is_multi_act, _, _ = \
             check_discrete(env, 'Cross Entropy', action=True, obs=False)
 
         # action space is multidimensional
@@ -119,12 +119,12 @@ if __name__ == "__main__":
     env = gym.make('LunarLander-v2')
 
     # initialize run parameters
-    n_episodes = 1000       # number of episodes to train the XE learner on
+    render = False          # render runs during training?
+    n_episodes = 100       # number of episodes to train the XE learner on
     max_episode_len = 200   # max number of timesteps per episode
-    n_theta_samples = 500               # number of samples to generate per run
+    n_theta_samples = 500   # number of samples to generate per run
     top_n = int(n_theta_samples * 0.2)  # average over the `top_n` best
     # performing theta samples
-    render = False          # render runs during training?
 
     xe_params = \
         {'max_episode_len':  max_episode_len,

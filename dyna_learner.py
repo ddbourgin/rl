@@ -17,13 +17,13 @@ class DynaLearner(object):
     def __init__(self, env, **kwargs):
         self.__validate_env__(env)
 
-        self.n_simulated_actions = kwargs['n_simulated_actions']
-        self.episode_len = kwargs['max_episode_len']
-        self.gamma = kwargs['discount_factor']
-        self.epsilon = kwargs['epsilon']
-        self.learning_rate = kwargs['learning_rate']
-        self.q_plus = kwargs['dyna_q_plus']
-        self.explore_weight = kwargs['explore_weight']
+        self.n_simulated_actions = n_simulated_actions
+        self.explore_weight = explore_weight
+        self.episode_len = max_episode_len
+        self.learning_rate = learning_rate
+        self.gamma = discount_factor
+        self.q_plus = dyna_q_plus
+        self.epsilon = epsilon
 
         # initialize Q function
         self.Q = np.random.rand(self.n_states, self.n_actions)

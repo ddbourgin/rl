@@ -16,11 +16,11 @@ def init_model(**kwargs):
     function.  Network takes as input an observation at time t, and returns the
     vector of Q values for each action available .
     """
-    hidden_size = kwargs['hidden_dim']
-    n_obs_dims = kwargs['n_obs_dims']
-    n_actions = kwargs['n_actions']
-    activation = kwargs['activation']
-    lr = kwargs['learning_rate']
+    hidden_size = hidden_dim
+    n_obs_dims = n_obs_dims
+    n_actions = n_actions
+    activation = activation
+    lr = learning_rate
 
     model = Sequential()
     model.add(Dense(hidden_size, input_shape=(
@@ -40,8 +40,8 @@ class ExperienceReplay(object):
         self.n_actions = n_actions
         self.observation_dims = obs_dims
 
-        self.max_memory = kwargs['mem_limit'] if 'mem_limit' in kwargs else 100
-        self.discount = kwargs['gamma'] if 'gamma' in kwargs else 0.9
+        self.max_memory = mem_limit if 'mem_limit' in kwargs else 100
+        self.discount = gamma if 'gamma' in kwargs else 0.9
 
     def store(self, experience, done):
         # experience = [s, a, r, s']
@@ -143,10 +143,8 @@ def run_episode(env, q_network, exp_replay, epsilon, batch_size=10,
 
 
 def plot_run(epoch_reward, epoch_mse, **kwargs):
-    n_epochs = kwargs['n_epochs']
-    update_target_every = kwargs['update_every']
-    window_size = kwargs['smoothing_window']
-    save_path = kwargs['save_path']
+    update_target_every = update_every
+    window_size = smoothing_window
 
     t_update_epoch = \
         [i for i in np.arange(1, n_epochs + 1) if i % update_target_every == 0]
@@ -178,6 +176,7 @@ if __name__ == "__main__":
     n_obs_dims = env.observation_space.shape[0]
 
     # initialize run parameters
+    render = False     # render runs during training
     gamma = 0.9        # temporal discount parameter
     n_epochs = 500     # number of episodes to train the q network on
     epsilon = 0.10     # for epsilon-greedy policy during training
@@ -188,7 +187,6 @@ if __name__ == "__main__":
     learning_rate = 0.001      # learning rate for q_network
     unit_activations = 'relu'  # unit activations in q_network
     update_target_every = 20   # update the target net after every n epochs
-    render = False  # render runs during training
 
     save_fp = './plots/deep_q_training_lr{}_meml{}_batch{}_hidden{}.png'\
         .format(learning_rate, mem_limit, batch_size, hidden_dim)

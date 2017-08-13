@@ -15,10 +15,10 @@ class MonteCarloLearner(object):
     def __init__(self, env, **kwargs):
         self.__validate_env__(env)
 
-        self.episode_len = kwargs['max_episode_len']
-        self.off_policy = kwargs['off_policy']
-        self.gamma = kwargs['discount_factor']
-        self.epsilon = kwargs['epsilon']
+        self.episode_len = max_episode_len
+        self.off_policy = off_policy
+        self.gamma = discount_factor
+        self.epsilon = epsilon
 
         # initialize Q function
         self.Q = np.random.rand(self.n_states, self.n_actions)
@@ -139,7 +139,7 @@ class MonteCarloLearner(object):
 
     def run_episode(self, env, render=False):
         obs = env.reset()
-        obs_number = self.obs2num[obs]
+        s = self.obs2num[obs]
 
         # run one episode of the RL problem
         episode_history, reward_history = [], []
@@ -148,15 +148,15 @@ class MonteCarloLearner(object):
                 env.render()
 
             # generate an action using epsilon-soft policy
-            action = self.epsilon_soft_policy(obs_number)
-            action_number = self.action2num[action]
+            action = self.epsilon_soft_policy(s)
+            a = self.action2num[action]
 
             # store (state, action) tuple
-            episode_history.append((obs_number, action_number))
+            episode_history.append((s, a))
 
             # take action
             obs_next, reward, done, info = env.step(action)
-            obs_next_number = self.obs2num[obs_next_number]
+            s_ = self.obs2num[obs_next]
 
             # record rewards
             reward_history.append(reward)
@@ -164,8 +164,7 @@ class MonteCarloLearner(object):
             if done:
                 break
 
-            obs = obs_next
-            obs_number = obs_next_number
+            obs, s = obs_next, s_
 
         if self.off_policy:
             self.off_policy_update_Q(episode_history, reward_history)
