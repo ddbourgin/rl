@@ -31,7 +31,7 @@ def tile_state_space(env, n_tilings, grid_size=(4, 4)):
         An integer reflecting the total number of unique states possible under
         this tile coding regimen
     """
-    _, _ = check_continuous(env, 'Tile Coding', action=False, obs=True)
+    _, _, _, _ = check_continuous(env, 'Tile Coding', action=False, obs=True)
     obs_max = np.nan_to_num(env.observation_space.high)
     obs_min = np.nan_to_num(env.observation_space.low)
     obs_range = obs_max - obs_min
@@ -59,42 +59,55 @@ def softmax(obs, W, b):
     return probs
 
 
-def check_continuous(env, name='', action=True, obs=True):
-    continuous = gym.spaces.box.Box
+def check_tuple(env):
     tuple_space = gym.spaces.tuple_space.Tuple
 
     is_tuple_action = isinstance(env.action_space, tuple_space)
     is_tuple_obs = isinstance(env.observation_space, tuple_space)
+    return is_tuple_action, is_tuple_obs
+
+
+def check_continuous(env, name='', action=True, obs=True):
+    continuous = gym.spaces.box.Box
+    is_tuple_action, is_tuple_obs = check_tuple(env)
 
     # action and observation spaces must by continuous
-    if obs and is_tuple_obs:
-        if not all([isinstance(i, continuous) for i in env.observation_space.spaces]):
+    if is_tuple_obs:
+        is_continuous_obs = \
+            all([isinstance(i, continuous)
+                 for i in env.observation_space.spaces])
+
+        if obs and not is_continuous_obs:
             raise TypeError('{} only works with continous '
                             'observation spaces'.format(name))
 
-    # action and observation spaces must by discrete for tabular learning
-    elif obs and not isinstance(env.observation_space, continuous):
-        raise TypeError('{} only works with continous'
-                        'observation spaces'.format(name))
+    else:
+        is_continuous_obs = isinstance(env.observation_space, continuous)
 
-    if action and is_tuple_action:
-        if not all([isinstance(i, continuous) for i in env.action_space.spaces]):
+        if obs and not is_continuous_obs:
+            raise TypeError('{} only works with continous'
+                            'observation spaces'.format(name))
+
+    if is_tuple_action:
+        is_continuous_action = \
+            all([isinstance(i, continuous) for i in env.action_space.spaces])
+
+        if action and not is_continuous_action:
             raise TypeError('{} only works with continuous '
                             'action spaces'.format(name))
 
-    elif action and not isinstance(env.action_space, continuous):
-        raise TypeError('{} only works with continuous '
-                        'action spaces'.format(name))
+    else:
+        is_continuous_action = isinstance(env.action_space, continuous)
+        if action and not is_continuous_action:
+            raise TypeError('{} only works with continuous '
+                            'action spaces'.format(name))
 
-    return is_tuple_obs, is_tuple_action
+    return is_tuple_obs, is_tuple_action, is_continuous_obs, is_continuous_action
 
 
 def check_discrete(env, name, action=True, obs=True):
     discrete = gym.spaces.discrete.Discrete
-    tuple_space = gym.spaces.tuple_space.Tuple
-
-    is_tuple_action = isinstance(env.action_space, tuple_space)
-    is_tuple_obs = isinstance(env.observation_space, tuple_space)
+    is_tuple_action, is_tuple_obs = check_tuple(env)
 
     # action and observation spaces must by discrete for tabular learning
     if is_tuple_obs:
