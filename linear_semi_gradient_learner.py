@@ -20,6 +20,7 @@ class LinearSemiGradLearner(object):
     def __init__(self, env, **kwargs):
         self.__validate_env__(env)
 
+        # a good heuristic for the learning rate is (1/10. * n_tiles)
         self.learning_rate = learning_rate
         self.episode_len = max_episode_len
         self.gamma = discount_factor
@@ -154,7 +155,7 @@ class LinearSemiGradLearner(object):
 
             if done or xx == (self.episode_len - 1):
                 # semi-gradient SARSA update
-                self.on_policy_update(self, s, a, reward, None, None)
+                self.on_policy_update(s, a, reward, None, None)
                 break
 
             # generate a new action using an epsilon-soft policy
@@ -162,7 +163,7 @@ class LinearSemiGradLearner(object):
             a_ = self.action2num[action_]
 
             # semi-gradient SARSA update
-            self.on_policy_update(self, s, a, reward, s_, a_)
+            self.on_policy_update(s, a, reward, s_, a_)
 
             # update observations and actions
             obs, s, action, a = obs_, s_, action_, a_
@@ -171,18 +172,21 @@ class LinearSemiGradLearner(object):
 
 if __name__ == "__main__":
     # initialize RL environment
-    env = gym.make('CartPole-v0')
+    env = gym.make('MountainCar-v0')
 
     # initialize run parameters
-    n_epochs = 100000       # number of episodes to train the q network on
+    n_epochs = 10000       # number of episodes to train the q network on
     epsilon = 0.10          # for epsilon-soft policy during training
     max_episode_len = 200   # max number of timesteps per episode/epoch
     discount_factor = 0.95  # temporal discount factor
-    learning_rate = 0.00005  # learning rate parameter
     render = False          # render runs during training
     n_tilings = 2 ** 7      # number of tilings to use if state space is continuous
-    grid_dims = [8, 8]      # number of squares in the tiling grid if state
-    # space is continuous
+    grid_dims = [4, 4]      # number of squares in the tiling grid if state
+                            # space is continuous
+    # good heuristic for the learning rate is one-tenth the reciporical of the
+    # total number of tiles
+    n_tiles = np.prod(grid_dims) * n_tilings
+    learning_rate = 0.01 * (1. / n_tilings)
 
     mc_params = \
         {'epsilon': epsilon,
