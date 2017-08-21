@@ -16,13 +16,13 @@ class TDLearner(object):
     def __init__(self, env, **kwargs):
         self.__validate_env__(env)
 
-        self.learning_rate = learning_rate
-        self.episode_len = max_episode_len
-        self.off_policy = off_policy
-        self.gamma = discount_factor
-        self.epsilon = epsilon
-        self.n_tilings = n_tilings
-        self.grid_dims = grid_dims
+        self.learning_rate = kwargs['learning_rate']
+        self.episode_len = kwargs['max_episode_len']
+        self.off_policy = kwargs['off_policy']
+        self.gamma = kwargs['discount_factor']
+        self.epsilon = kwargs['epsilon']
+        self.n_tilings = kwargs['n_tilings']
+        self.grid_dims = kwargs['grid_dims']
 
         # initialize Q function
         self.Q = defaultdict(np.random.rand)
@@ -46,14 +46,15 @@ class TDLearner(object):
         self.action2num = {act: i for i, act in enumerate(one_dim_action)}
         self.num2action = {i: act for act, i in self.action2num.items()}
 
+        # initialize obs -> scalar dictionaries
+        self.obs2num = {}
+        self.num2obs = {}
+
         self.obs_encoder = lambda x: x
         if not is_disc_obs:
             self.obs_encoder, _ = \
                 tile_state_space(env, n_tilings, grid_size=grid_dims)
 
-        # initialize obs -> scalar dictionaries
-        self.obs2num = {}
-        self.num2obs = {}
 
     def on_policy_update_Q(self, s, a, r, s_, a_):
         """

@@ -17,15 +17,15 @@ class DynaLearner(object):
     def __init__(self, env, **kwargs):
         self.__validate_env__(env)
 
-        self.n_simulated_actions = n_simulated_actions
-        self.explore_weight = explore_weight
-        self.episode_len = max_episode_len
-        self.learning_rate = learning_rate
-        self.gamma = discount_factor
-        self.q_plus = dyna_q_plus
-        self.epsilon = epsilon
+        self.n_simulated_actions = kwargs['n_simulated_actions']
+        self.explore_weight = kwargs['explore_weight']
+        self.episode_len = kwargs['max_episode_len']
+        self.learning_rate = kwargs['learning_rate']
+        self.gamma = kwargs['discount_factor']
+        self.q_plus = kwargs['dyna_q_plus']
+        self.epsilon = kwargs['epsilon']
 
-        # initialize Q function
+        # initialize tabular Q function
         self.Q = np.random.rand(self.n_states, self.n_actions)
 
         # initialize model
@@ -143,7 +143,7 @@ class DynaLearner(object):
             a = self.action2num[action]
 
             # take action
-            obs_next, reward, done, info = env.step(action)
+            obs_next, reward, done, _ = env.step(action)
             s_ = self.obs2num[obs_next]
 
             # update model

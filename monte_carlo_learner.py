@@ -15,10 +15,10 @@ class MonteCarloLearner(object):
     def __init__(self, env, **kwargs):
         self.__validate_env__(env)
 
-        self.episode_len = max_episode_len
-        self.off_policy = off_policy
-        self.gamma = discount_factor
-        self.epsilon = epsilon
+        self.episode_len = kwargs['max_episode_len']
+        self.off_policy = kwargs['off_policy']
+        self.gamma = kwargs['discount_factor']
+        self.epsilon = kwargs['epsilon']
 
         # initialize Q function
         self.Q = np.random.rand(self.n_states, self.n_actions)

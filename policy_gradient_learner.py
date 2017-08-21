@@ -19,17 +19,17 @@ class LinearPolicyGradLearner(object):
         self.__validate_env__(env)
 
         # a good heuristic for the learning rate is (1/10. * n_tiles)
-        self.value_learning_rate = value_learning_rate
-        self.policy_learning_rate = policy_learning_rate
-        self.episode_len = max_episode_len
-        self.gamma = discount_factor
-        self.epsilon = epsilon
+        self.value_learning_rate = kwargs['value_learning_rate']
+        self.policy_learning_rate = kwargs['policy_learning_rate']
+        self.episode_len = kwargs['max_episode_len']
+        self.gamma = kwargs['discount_factor']
+        self.epsilon = kwargs['epsilon']
 
         # only use tiling parameters if the observation space is continuous
         if not self.discrete_obs:
-            self.n_tilings = n_tilings
-            self.grid_dims = grid_dims
-            self.n_tiles = np.prod(grid_dims) * n_tilings
+            self.n_tilings = kwargs['n_tilings']
+            self.grid_dims = kwargs['grid_dims']
+            self.n_tiles = np.prod(self.grid_dims) * self.n_tilings
         else:
             self.n_tilings = None
             self.grid_dims = None
@@ -236,8 +236,7 @@ if __name__ == "__main__":
     discount_factor = 1.0   # temporal discount factor
     render = False          # render runs during training
     n_tilings = 8           # number of tilings to use if state space is continuous
-    grid_dims = [8, 8]      # number of squares in the tiling grid if state
-    # space is continuous
+    grid_dims = [8, 8]      # number of squares in the tiling grid
 
     # good heuristic for the learning rate is one-tenth the reciporical of the
     # total number of tiles

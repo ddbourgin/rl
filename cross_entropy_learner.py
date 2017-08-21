@@ -12,11 +12,12 @@ class CrossEntropyLearner(object):
     """
 
     def __init__(self, env, **kwargs):
+        # initialize theta dimensions and environment properties
         self.__validate_env__(env)
 
-        self.n_theta_samples = n_theta_samples
-        self.episode_len = max_episode_len
-        self.top_n = top_n
+        self.n_theta_samples = kwargs['n_theta_samples']
+        self.episode_len = kwargs['max_episode_len']
+        self.top_n = kwargs['top_n']
 
         # init mean and variance for mv gaussian with dimensions theta_dim
         self.theta_mean = np.random.rand(self.theta_dim)
@@ -76,7 +77,7 @@ class CrossEntropyLearner(object):
                 env.render()
 
             action = self.softmax_policy(obs, W, b)
-            obs, reward, done, info = env.step(action)
+            obs, reward, done, _ = env.step(action)
             total_reward += reward
 
             if done:
@@ -120,11 +121,12 @@ if __name__ == "__main__":
 
     # initialize run parameters
     render = False          # render runs during training?
-    n_episodes = 100       # number of episodes to train the XE learner on
+    n_episodes = 100        # number of episodes to train the XE learner on
     max_episode_len = 200   # max number of timesteps per episode
     n_theta_samples = 500   # number of samples to generate per run
-    top_n = int(n_theta_samples * 0.2)  # average over the `top_n` best
-    # performing theta samples
+
+    # average over the `top_n` best performing theta samples
+    top_n = int(n_theta_samples * 0.2)
 
     xe_params = \
         {'max_episode_len':  max_episode_len,
