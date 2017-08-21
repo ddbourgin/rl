@@ -5,16 +5,15 @@ from collections import defaultdict
 import gym
 import numpy as np
 
-from utils import check_discrete, tile_state_space
+from utils import check_discrete, tile_state_space, plot_rewards
 
 
 class LinearSemiGradLearner(object):
     """
-    An linear semi-gradient Q-learner for tile-coded continuous observation
-    spaces.
+    An linear semi-gradient expected SARSA-learner for tile-coded continuous
+    observation spaces.
 
-    NB. tends to be highly sensitive to the learning rate parameter. Should be
-    on the order of 1e-5
+    NB. tends to be highly sensitive to the learning rate parameter.
     """
 
     def __init__(self, env, **kwargs):
@@ -30,7 +29,7 @@ class LinearSemiGradLearner(object):
 
         # initialize Q weights
         n_tiles = np.prod(grid_dims) * n_tilings
-        self.weights = np.random.rand(n_tiles, self.n_actions)
+        self.weights = np.zeros((n_tiles, self.n_actions))
 
     def __validate_env__(self, env):
         is_multi_obs, is_multi_act, is_disc_obs, is_disc_act = \
@@ -84,7 +83,6 @@ class LinearSemiGradLearner(object):
         # incrementally build obs2num/num2obs with experience
         obs = self.discretize(obs)
 
-        #  print(obs)
         if any([type(i) == float for i in obs]):
             import ipdb
             ipdb.set_trace()
@@ -106,9 +104,12 @@ class LinearSemiGradLearner(object):
         return q_val
 
     def on_policy_update(self, s, a, reward, s_, a_):
-        Q_s_a_ = 0.0
+        EQ_s_a_ = 0.0
         if s_ is not None and a_ is not None:
-            Q_s_a_ = self.Q(s_, a_)
+            EQ_s_a_ = np.sum(
+                [self.epsilon_soft_policy(s_, aa) * self.Q(s_, aa) \
+                        for aa in xrange(self.n_actions)]
+            )
 
         # create binary state vector, which in the linear approximation case
         # corresponds to the gradient of Q(s, a) w.r.t. the weights
@@ -116,10 +117,10 @@ class LinearSemiGradLearner(object):
         for i in self.num2obs[s]:
             state_vec[i] = 1.
 
-        # semi-gradient SARSA update
+        # semi-gradient expected SARSA update
         update = \
             self.learning_rate * \
-            (reward + self.gamma * Q_s_a_ - self.Q(s, a)) * \
+            (reward + self.gamma * EQ_s_a_ - self.Q(s, a)) * \
             state_vec
 
         if any(np.isnan(update)):
@@ -154,7 +155,6 @@ class LinearSemiGradLearner(object):
             reward_history.append(reward)
 
             if done or xx == (self.episode_len - 1):
-                # semi-gradient SARSA update
                 self.on_policy_update(s, a, reward, None, None)
                 break
 
@@ -175,18 +175,18 @@ if __name__ == "__main__":
     env = gym.make('MountainCar-v0')
 
     # initialize run parameters
-    n_epochs = 10000       # number of episodes to train the q network on
+    n_epochs = 5000       # number of episodes to train the q network on
     epsilon = 0.10          # for epsilon-soft policy during training
     max_episode_len = 200   # max number of timesteps per episode/epoch
-    discount_factor = 0.95  # temporal discount factor
+    discount_factor = 1.0   # temporal discount factor
     render = False          # render runs during training
-    n_tilings = 2 ** 7      # number of tilings to use if state space is continuous
-    grid_dims = [4, 4]      # number of squares in the tiling grid if state
+    n_tilings = 8           # number of tilings to use if state space is continuous
+    grid_dims = [8, 8]      # number of squares in the tiling grid if state
                             # space is continuous
     # good heuristic for the learning rate is one-tenth the reciporical of the
     # total number of tiles
     n_tiles = np.prod(grid_dims) * n_tilings
-    learning_rate = 0.01 * (1. / n_tilings)
+    learning_rate = 0.1 * (1. / n_tilings)
 
     mc_params = \
         {'epsilon': epsilon,
@@ -211,6 +211,13 @@ if __name__ == "__main__":
         epoch_reward.append(total_reward)
 
     print('\nTraining took {} mins'.format((time() - t0) / 60.))
+
+    env_name = env.spec.id
+    param_str = 'lr{:.3E}_ntilings{}_griddim{}x{}.png'\
+                    .format(learning_rate, n_tilings, *grid_dims)
+    save_path = 'plots/linear_semi_gradient_{}.png'.format(param_str)
+    plot_rewards(episode_rewards, save_path, env_name)
+
     print('Executing greedy policy\n')
 
     sg_learner.epsilon = 0

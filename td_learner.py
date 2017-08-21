@@ -5,8 +5,7 @@ from collections import defaultdict
 import gym
 import numpy as np
 
-from utils import check_discrete, tile_state_space
-
+from utils import check_discrete, tile_state_space, plot_rewards
 
 class TDLearner(object):
     """
@@ -50,7 +49,7 @@ class TDLearner(object):
         self.obs_encoder = lambda x: x
         if not is_disc_obs:
             self.obs_encoder, _ = \
-                tile_state_space(env, n_tilings, grid_size=(4, 4))
+                tile_state_space(env, n_tilings, grid_size=grid_dims)
 
         # initialize obs -> scalar dictionaries
         self.obs2num = {}
@@ -163,7 +162,7 @@ class TDLearner(object):
 
 if __name__ == "__main__":
     # initialize RL environment
-    env = gym.make('Copy-v0')
+    env = gym.make('CartPole-v0')
 
     # initialize run parameters
     n_epochs = 50000        # number of episodes to train the q network on
@@ -172,10 +171,10 @@ if __name__ == "__main__":
     discount_factor = 0.95  # temporal discount factor
     learning_rate = 0.05    # learning rate parameter
     render = False          # render runs during training
-    n_tilings = 2 ** 7      # number of tilings to use if state space is continuous
+    n_tilings = 8           # number of tilings to use if state space is continuous
     grid_dims = [8, 8]      # number of squares in the tiling grid if state
                             # space is continuous
-    off_policy = True # on_policy = expected SARSA update
+    off_policy = False      # on_policy = expected SARSA update
                             # off_policy = Q-learning update
 
     mc_params = \
@@ -192,18 +191,24 @@ if __name__ == "__main__":
 
     # train monte carlo learner
     t0 = time()
-    epoch_reward = []
+    episode_rewards = []
     for idx in xrange(n_epochs):
         total_reward = td_learner.run_episode(env)
 
         print('Total reward on epoch {}/{}:\t{}'
               .format(idx + 1, n_epochs, total_reward))
 
-        epoch_reward.append(total_reward)
-
+        episode_rewards.append(total_reward)
     print('\nTraining took {} mins'.format((time() - t0) / 60.))
-    print('Executing greedy policy\n')
 
+    env_name = env.spec.id
+    policy = 'off' if off_policy else 'on'
+    param_str = '{}Policy_lr{:.3E}_ntilings{}_griddim{}x{}.png'\
+                    .format(policy, learning_rate, n_tilings, *grid_dims)
+    save_path = 'plots/td_learner_{}.png'.format(param_str)
+    plot_rewards(episode_rewards, save_path, env_name)
+
+    print('Executing greedy policy\n')
     td_learner.epsilon = 0
     for idx in xrange(10):
         total_reward = td_learner.run_episode(env, render=True)

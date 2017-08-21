@@ -1,6 +1,53 @@
+import numbers
+
 import gym
 import numpy as np
+
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+sns.set_style('white')
+
+from scipy.signal import savgol_filter
+from scipy.stats import norm, multivariate_normal
+
 from tiles.tiles import tiles
+
+def sample_gaussian(mu, sigma, x=None):
+    if x is None:
+        # return a sample from the normal distribution
+        if isinstance(mu, numbers.Number):
+            return np.random.normal(loc=mu, scale=sigma)[0]
+        else:
+            return np.random.multivariate_normal(mean=mu, cov=np.diag(sigma))
+    else:
+        # return p(x) under normal distribution specified by mu, sigma
+        if isinstance(mu, numbers.Number):
+            return norm.pdf(x, loc=mu, scale=sigma)
+        else:
+            return multivariate_normal.pdf(x, mean=mu, cov=np.diag(sigma))
+
+
+
+def plot_rewards(reward_history, save_path, env_name, smooth=True):
+    fig, ax = plt.subplots()
+    if smooth:
+        window = len(reward_history) / 100.
+        # window must be odd
+        window = window if window % 2 == 0 else window + 1
+        reward_history = savgol_filter(reward_history, 501, 2)
+
+    ax = sns.tsplot(reward_history, ax=ax)
+    ax.set_xlabel('Episode')
+    ax.set_ylabel('Total Reward')
+    ax.set_title(env_name)
+    sns.despine()
+
+    plt.show()
+    plt.savefig(save_path)
+    plt.close()
 
 
 def tile_state_space(env, n_tilings, grid_size=(4, 4)):
